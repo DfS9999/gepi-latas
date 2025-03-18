@@ -2,9 +2,12 @@ from argparse    import ArgumentParser
 from os          import mkdir, listdir
 from time        import strftime
 from random      import seed, randint, choice
-from PIL         import Image
+from PIL         import Image, ImageDraw
 from torchvision import transforms
-from PIL         import ImageDraw
+
+import cv2
+import numpy as np
+
 
 CARD_SIZE     = 224
 TARGET_SIZE   = 640
@@ -88,33 +91,67 @@ def main():
 
                 transformed_card_img = transform_cards(card_img)
 
+                # random coordinates to paste the card
                 x, y = [randint(placement_min, placement_max) for _ in range(2)]
+
+                alpha_card = transformed_card_img.getchannel('A')
+                
+                # pasting
                 output_img.paste(
                     im=transformed_card_img, 
                     box=(x, y),
-                    mask=transformed_card_img.getchannel('A'))
+                    mask=alpha_card
+                )
+                
+                #################################                
+                # calculating bounding box values
+                #################################                
 
+                ## findContours() returns (contours, hierarchy)
+                #contours, _ = cv2.findContours(np.array(alpha_img), mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_SIMPLE)
+                #contour_max = max(contours, key=cv2.contourArea)    
+                #test_contour = np.zeros((transformed_card_img.height, transformed_card_img.width, 3))
+                #cv2.drawContours(test_contour, contour_max, -1, (0,255,0), 1)
+                #cv2.imwrite('test_contours.png', test_contour)     
+                ## minAreaRect() returns RotatedRect (const Point2f & center, const Size2f & size, float angle)	
+                #rotated_rectangle         = cv2.minAreaRect(contour_max)
+                #rotated_rectangle_corners = cv2.boxPoints(rotated_rectangle)
+                #rotated_rectangle_corners[:, 0] += x
+                #rotated_rectangle_corners[:, 1] += y
+                #box_x, box_y, box_width, box_height = cv2.boundingRect(rotated_rectangle_corners)
+                
+                alpha_pixels = cv2.findNonZero(np.array(alpha_card))
+                
+                # boundingRect() returns the minimal up-right bounding rectangle for the specified point set
+                box_x, box_y, box_width, box_height = cv2.boundingRect(alpha_pixels)
+                
+                ## shifting coordinates by x,y to match the pasted coordinates
+                box_x += x
+                box_y += y
+                
                 """
                 One row per object. Each row is | class | x_center | y_center | width | height |
                 format. Box coordinates must be in normalized xywh format (from 0 to 1). 
-                If your boxes are in pixels, divide x_center and width by image width, and y_center and height by image height.
+                If your boxes are in pixels, divide x_center and width by image width, 
+                and y_center and height by image height.
                 """
-                cls      = CLASS_IDX_TABLE[class_name]
-                x_center = (x + transformed_card_img.width / 2)  / TARGET_SIZE
-                y_center = (y + transformed_card_img.height / 2) / TARGET_SIZE
-                width    = transformed_card_img.width / TARGET_SIZE
-                height   = transformed_card_img.height / TARGET_SIZE
-                label_text = f"{cls} {x_center} {y_center} {width} {height}\n"
+                # label data
+                cls = CLASS_IDX_TABLE[class_name]
+                norm_box_center_x = (box_x + box_width / 2)  / TARGET_SIZE
+                norm_box_center_y = (box_y + box_height / 2) / TARGET_SIZE
+                norm_width        = box_width  / TARGET_SIZE
+                norm_height       = box_height / TARGET_SIZE
+                label_text = f"{cls} {norm_box_center_x} {norm_box_center_y} {norm_width} {norm_height}\n"
                 label_file.write(label_text)
 
-                # bounding box drawing
-# TODO get the real values
+                # draw bounding box. [top left coordinates, bottom right coordinates]
                 ImageDraw.Draw(output_img).rectangle(
-                    xy=[x, y, 
-                        x + transformed_card_img.width, 
-                        y + transformed_card_img.height],
-                    outline=(255,0,0),
-                    width=3
+                    xy=[box_x, 
+                        box_y, 
+                        box_x + box_width, 
+                        box_y + box_height],
+                    outline=(255,255,0),
+                    width=4
                 )
 
             output_img.convert('RGB').save(output_img_path)
