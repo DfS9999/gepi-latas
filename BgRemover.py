@@ -11,7 +11,7 @@ def main():
     arguments = parser.parse_args()
     root = arguments.root_folder_structure[:-1]   # remove ending '\'
     
-    bgrm_root = root + "_bgrm" + strftime('%d%H%M%S')
+    bgrm_root = root + "_bgrm" + strftime('%y%m%d%H%M%S')
     mkdir(path=bgrm_root)
     print("* Created new root folder: ", bgrm_root)
     
